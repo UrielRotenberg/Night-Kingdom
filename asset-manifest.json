@@ -1,0 +1,13 @@
+{
+  "files": {
+    "main.css": "/Night-Kingdom/static/css/main.d7ec2ed4.css",
+    "main.js": "/Night-Kingdom/static/js/main.b9e5c31e.js",
+    "index.html": "/Night-Kingdom/index.html",
+    "main.d7ec2ed4.css.map": "/Night-Kingdom/static/css/main.d7ec2ed4.css.map",
+    "main.b9e5c31e.js.map": "/Night-Kingdom/static/js/main.b9e5c31e.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.d7ec2ed4.css",
+    "static/js/main.b9e5c31e.js"
+  ]
+}
