@@ -1,4 +1,6 @@
 import React from 'react';
+import NightKingdomLogo from './logo/NightKingdomLogo';
+
 
 const LandingPage = ({ onStartInspection }) => {
   return (
@@ -11,6 +13,7 @@ const LandingPage = ({ onStartInspection }) => {
       <div className="relative z-10 flex flex-col items-center justify-center h-screen p-4">
         <div className="text-center space-y-8">
           <h1 className="text-6xl font-bold text-white mb-4 animate-fade-in">
+        <NightKingdomLogo size="large" />
             ממלכת הלילה
           </h1>
           <p className="text-xl text-blue-200 mb-8">

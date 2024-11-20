@@ -1,273 +1,272 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Timer, Radio } from 'lucide-react';
+import io from 'socket.io-client';
+import NightKingdomLogo from './logo/NightKingdomLogo';
 
-const InspectionSystem = ({ onBack }) => {
-  const [stage, setStage] = useState('initial');
-  const [hasSpoken, setHasSpoken] = useState(false);
-  const [cells, setCells] = useState(Array(6).fill({ 
-    active: false, 
-    timestamp: null, 
-    duration: 0,
-    skipped: false,
-    failed: false 
-  }));
-  const [startTime, setStartTime] = useState(null);
-  const [currentCell, setCurrentCell] = useState(0);
-  const [elapsedTime, setElapsedTime] = useState(0);
-  const [results, setResults] = useState(null);
-  
-  const recognition = useRef(null);
-  const cellTimeout = useRef(null);
-  const flashlightTimeout = useRef(null);
+const InspectionSystem = () => {
+    const [cells, setCells] = useState(Array(6).fill({
+        active: false,
+        timestamp: null,
+        duration: 0,
+        failed: false,
+        skipped: false
+    }));
+    const [currentCell, setCurrentCell] = useState(0);
+    const [elapsedTime, setElapsedTime] = useState(0);
+    const [startTime, setStartTime] = useState(null);
+    const [isTestActive, setIsTestActive] = useState(true);
+    const [results, setResults] = useState(null);
 
-  const activateFlashlight = async () => {
-    if (stage !== 'inspection' || !cells[currentCell]) return;
-    
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' }
-      });
-      const track = stream.getVideoTracks()[0];
-      
-      await track.applyConstraints({
-        advanced: [{ torch: true }]
-      });
-      
-      setTimeout(async () => {
-        await track.applyConstraints({
-          advanced: [{ torch: false }]
-        });
-        stream.getTracks().forEach(track => track.stop());
-        
-        setCells(prev => {
-          const newCells = [...prev];
-          newCells[currentCell] = {
-            active: true,
-            timestamp: Date.now(),
-            duration: (Date.now() - startTime) / 1000,
-            skipped: false,
-            failed: false
-          };
-          return newCells;
-        });
-        setCurrentCell(prev => prev + 1);
-      }, 2000);
-      
-    } catch (err) {
-      console.error('Flashlight error:', err);
-      alert('שגיאה בהפעלת הפנס. נא לוודא שיש הרשאות מתאימות.');
-    }
-  };
+    const socket = io('http://172.20.10.4:3001', {
+        transports: ['websocket', 'polling']
+    });
 
-  useEffect(() => {
-    if (stage === 'initial' && !hasSpoken) {
-      const announcement = new SpeechSynthesisUtterance(
-        'ברוך הבא למערכת בדיקת התאים. אנא אמור "התחל בדיקה" כדי להתחיל'
-      );
-      announcement.lang = 'he-IL';
-      window.speechSynthesis.speak(announcement);
-      setHasSpoken(true);
-      
-      if ('webkitSpeechRecognition' in window) {
-        recognition.current = new window.webkitSpeechRecognition();
-        recognition.current.continuous = true;
-        recognition.current.interimResults = false;
-        recognition.current.lang = 'he-IL';
-
-        recognition.current.onresult = (event) => {
-          const transcript = event.results[event.results.length - 1][0].transcript;
-          console.log('Heard:', transcript);
-          if (transcript.includes('התחל בדיקה')) {
-            startInspection();
-          }
-        };
-
-        recognition.current.onend = () => {
-          if (stage === 'listening') {
-            recognition.current.start();
-          }
-        };
-
-        setStage('listening');
-        recognition.current.start();
-      }
-    }
-  }, [stage, hasSpoken]);
-
-  useEffect(() => {
-    let timer;
-    if (stage === 'inspection') {
-      timer = setInterval(() => {
-        setElapsedTime((Date.now() - startTime) / 1000);
-      }, 100);
-    }
-    return () => clearInterval(timer);
-  }, [stage, startTime]);
-
-  useEffect(() => {
-    if (stage === 'inspection' && currentCell < cells.length) {
-      cellTimeout.current = setTimeout(() => {
-        if (!cells[currentCell].active) {
-          setCells(prev => {
-            const newCells = [...prev];
-            newCells[currentCell] = {
-              active: false,
-              timestamp: Date.now(),
-              duration: 0,
-              skipped: false,
-              failed: true
-            };
-            return newCells;
-          });
-          setCurrentCell(prev => prev + 1);
+    // Initialize start time
+    useEffect(() => {
+        if (!startTime) {
+            setStartTime(Date.now());
         }
-      }, 7000);
+    }, []);
 
-      return () => clearTimeout(cellTimeout.current);
-    }
+    // Timer effect
+    useEffect(() => {
+        let timer;
+        if (isTestActive) {
+            timer = setInterval(() => {
+                setElapsedTime((Date.now() - startTime) / 1000);
+            }, 100);
+        }
+        return () => clearInterval(timer);
+    }, [startTime, isTestActive]);
 
-    if (stage === 'inspection' && currentCell >= cells.length) {
-      completeInspection();
-    }
-  }, [currentCell, cells, stage]);
+    // Socket events handling
+    useEffect(() => {
+        socket.on('activateCell', ({ cellNumber }) => {
+            console.log('Received activation for cell:', cellNumber);
+            if (cellNumber === currentCell) {
+                // עדכון התא הנוכחי
+                setCells(prev => {
+                    const newCells = [...prev];
+                    newCells[currentCell] = {
+                        active: true,
+                        timestamp: Date.now(),
+                        duration: (Date.now() - startTime) / 1000,
+                        failed: false,
+                        skipped: false
+                    };
+                    return newCells;
+                });
 
-  const startInspection = () => {
-    setStage('inspection');
-    setStartTime(Date.now());
-    if (recognition.current) {
-      recognition.current.stop();
-    }
-  };
+                // מעבר לתא הבא
+                const nextCell = currentCell + 1;
+                setCurrentCell(nextCell);
 
-  const completeInspection = () => {
-    setStage('completed');
-    const endTime = Date.now();
-    
-    const report = {
-      date: new Date().toLocaleDateString('he-IL'),
-      time: new Date().toLocaleTimeString('he-IL'),
-      totalDuration: ((endTime - startTime) / 1000).toFixed(1),
-      cells: cells.map((cell, index) => ({
-        number: index + 1,
-        status: cell.active ? 'תקין' : cell.failed ? 'נכשל' : 'דילוג',
-        duration: cell.active ? cell.duration.toFixed(1) : null,
-        timestamp: cell.timestamp ? new Date(cell.timestamp).toLocaleTimeString('he-IL') : null
-      }))
+                // שליחת עדכון חזרה למובייל
+                socket.emit('cellUpdate', nextCell);
+            }
+        });
+
+        return () => socket.off('activateCell');
+    }, [currentCell, startTime]);
+
+    // Cell timeout effect
+    useEffect(() => {
+        let timeout;
+        if (isTestActive && currentCell < cells.length) {
+            timeout = setTimeout(() => {
+                if (!cells[currentCell].active) {
+                    setCells(prev => {
+                        const newCells = [...prev];
+                        newCells[currentCell] = {
+                            active: false,
+                            timestamp: Date.now(),
+                            duration: 0,
+                            failed: true,
+                            skipped: false
+                        };
+                        return newCells;
+                    });
+                    const nextCell = currentCell + 1;
+                    setCurrentCell(nextCell);
+                    socket.emit('cellUpdate', nextCell);
+                }
+            }, 7000);
+        }
+
+        if (currentCell >= cells.length && isTestActive) {
+            completeTest();
+        }
+
+        return () => clearTimeout(timeout);
+    }, [currentCell, cells, isTestActive]);
+
+    const completeTest = () => {
+        setIsTestActive(false);
+        const endTime = Date.now();
+
+        const failedCells = cells.filter(cell => cell.failed).length;
+        const activeCells = cells.filter(cell => cell.active).length;
+        const successRate = (activeCells / cells.length) * 100;
+
+        setResults({
+            date: new Date().toLocaleDateString('he-IL'),
+            time: new Date().toLocaleTimeString('he-IL'),
+            totalDuration: ((endTime - startTime) / 1000).toFixed(1),
+            totalCells: cells.length,
+            checkedCells: activeCells,
+            failedCells: failedCells,
+            successRate: successRate.toFixed(1),
+            cellDetails: cells.map((cell, index) => ({
+                number: index + 1,
+                status: cell.active ? 'תקין' : cell.failed ? 'נכשל' : 'לא נבדק',
+                checkTime: cell.timestamp ? new Date(cell.timestamp).toLocaleTimeString('he-IL') : '-',
+                duration: cell.duration ? cell.duration.toFixed(1) : '-',
+            })),
+            grade: successRate === 100 ? 'מצוין' :
+                successRate >= 90 ? 'טוב מאוד' :
+                    successRate >= 80 ? 'טוב' : 'נכשל',
+            shiftInfo: {
+                prison: 'איילון',
+                wing: 'אגף ב׳',
+                officer: 'סוהר יוסי כהן',
+                shift: 'משמרת לילה'
+            }
+        });
     };
-    
-    setResults(report);
-  };
 
-  return (
-    <div className="min-h-screen bg-gray-900 text-white p-6">
-      {stage === 'listening' && (
-        <div className="flex flex-col items-center justify-center h-screen">
-          <div className="animate-pulse text-2xl mb-4">מקשיב...</div>
-          <div className="text-lg text-gray-400 mb-6">אנא אמור "התחל בדיקה"</div>
-          <button
-            onClick={startInspection}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg 
-                      text-sm transition-all duration-300"
-          >
-            התחל ללא זיהוי קולי
-          </button>
-        </div>
-      )}
+    const resetTest = () => {
+        setCells(Array(6).fill({
+            active: false,
+            timestamp: null,
+            duration: 0,
+            failed: false,
+            skipped: false
+        }));
+        setCurrentCell(0);
+        setElapsedTime(0);
+        setStartTime(Date.now());
+        setIsTestActive(true);
+        setResults(null);
+        socket.emit('cellUpdate', 0); // Reset mobile client
+    };
 
-      {stage === 'inspection' && (
-        <div className="space-y-6">
-          <div className="flex justify-between items-center">
-            <h1 className="text-2xl font-bold">בדיקת תאים</h1>
-            <div className="bg-gray-800 px-4 py-2 rounded-lg flex items-center gap-2">
-              <Timer className="h-5 w-5" />
-              <span className="font-mono text-xl">{elapsedTime.toFixed(1)}s</span>
-            </div>
-          </div>
+    if (!isTestActive && results) {
+        return (
+            <div className="min-h-screen bg-gray-900 text-white p-6">
+                <div className="max-w-4xl mx-auto bg-gray-800 rounded-xl shadow-2xl p-8">
+                    <h1 className="text-3xl font-bold text-center mb-8 text-blue-400">
+                        <NightKingdomLogo size="large" />
+                        סיכום בדיקת תאים
+                    </h1>
 
-          <div className="grid grid-cols-3 gap-6">
-            {cells.map((cell, index) => (
-              <div 
-                key={index}
-                onClick={() => index === currentCell && activateFlashlight()}
-                className={`
-                  relative p-6 rounded-lg cursor-pointer
-                  ${cell.active ? 'bg-green-700' : 
-                    cell.failed ? 'bg-red-700' :
-                    cell.skipped ? 'bg-yellow-700' :
-                    index === currentCell ? 'bg-blue-700 animate-pulse' : 
-                    'bg-gray-700'}
-                  ${index === currentCell ? 'border-2 border-white' : ''}
-                `}
-              >
-                <div className="absolute inset-0 opacity-20">
-                  <div className="w-full h-1 bg-gray-800" />
-                  <div className="absolute top-0 bottom-0 left-1/4 w-1 bg-gray-800" />
-                  <div className="absolute top-0 bottom-0 left-1/2 w-1 bg-gray-800" />
-                  <div className="absolute top-0 bottom-0 left-3/4 w-1 bg-gray-800" />
-                </div>
-                
-                <Radio className={`h-12 w-12 ${
-                  cell.active ? 'text-green-300' : 
-                  cell.failed ? 'text-red-300' :
-                  cell.skipped ? 'text-yellow-300' :
-                  'text-gray-400'
-                }`} />
-                <div className="mt-2 text-center">
-                  <h3 className="text-xl font-bold">תא {index + 1}</h3>
-                  {cell.timestamp && (
-                    <p className="text-sm opacity-80">
-                      {new Date(cell.timestamp).toLocaleTimeString()}
-                    </p>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+                    <div className="grid grid-cols-2 gap-6 mb-8">
+                        <div className="bg-gray-700 rounded-lg p-4">
+                            <h3 className="text-lg font-semibold mb-2">מידע כללי</h3>
+                            <p>תאריך: {results.date}</p>
+                            <p>שעה: {results.time}</p>
+                            <p>זמן כולל: {results.totalDuration} שניות</p>
+                            <p>אחוז הצלחה: {results.successRate}%</p>
+                            <p>ציון: {results.grade}</p>
+                        </div>
 
-      {stage === 'completed' && results && (
-        <div className="max-w-2xl mx-auto bg-gray-800 rounded-lg p-6">
-          <h2 className="text-2xl font-bold mb-6">סיכום בדיקה</h2>
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>תאריך: {results.date}</div>
-              <div>שעה: {results.time}</div>
-              <div>משך כולל: {results.totalDuration} שניות</div>
-            </div>
-            
-            <div className="mt-6">
-              <h3 className="text-xl font-bold mb-3">פירוט תאים:</h3>
-              <div className="space-y-2">
-                {results.cells.map(cell => (
-                  <div key={cell.number} className={`
-                    p-3 rounded-lg
-                    ${cell.status === 'תקין' ? 'bg-green-800/50' :
-                      cell.status === 'דילוג' ? 'bg-yellow-800/50' :
-                      'bg-red-800/50'}
-                  `}>
-                    <div className="flex justify-between items-center">
-                      <span>תא {cell.number}</span>
-                      <span>{cell.status}</span>
-                      {cell.duration && <span>{cell.duration} שניות</span>}
-                      {cell.timestamp && <span>{cell.timestamp}</span>}
+                        <div className="bg-gray-700 rounded-lg p-4">
+                            <h3 className="text-lg font-semibold mb-2">פרטי משמרת</h3>
+                            <p>בית סוהר: {results.shiftInfo.prison}</p>
+                            <p>אגף: {results.shiftInfo.wing}</p>
+                            <p>סוהר: {results.shiftInfo.officer}</p>
+                            <p>משמרת: {results.shiftInfo.shift}</p>
+                        </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
 
-          <button
-            onClick={onBack}
-            className="mt-8 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg"
-          >
-            חזור למסך הראשי
-          </button>
+                    <div className="bg-gray-700 rounded-lg p-4 mb-8">
+                        <h3 className="text-lg font-semibold mb-2">סטטיסטיקות</h3>
+                        <div className="grid grid-cols-3 gap-4 text-center">
+                            <div>
+                                <p className="text-3xl font-bold text-blue-400">{results.totalCells}</p>
+                                <p>סה״כ תאים</p>
+                            </div>
+                            <div>
+                                <p className="text-3xl font-bold text-green-400">{results.checkedCells}</p>
+                                <p>תאים תקינים</p>
+                            </div>
+                            <div>
+                                <p className="text-3xl font-bold text-red-400">{results.failedCells}</p>
+                                <p>תאים שנכשלו</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-gray-700 rounded-lg p-4 mb-8">
+                        <h3 className="text-lg font-semibold mb-4">פירוט תאים</h3>
+                        <div className="grid gap-3">
+                            {results.cellDetails.map(cell => (
+                                <div key={cell.number}
+                                    className={`p-3 rounded-lg grid grid-cols-4 gap-4 ${cell.status === 'תקין' ? 'bg-green-800/50' :
+                                            cell.status === 'נכשל' ? 'bg-red-800/50' :
+                                                'bg-gray-800/50'
+                                        }`}
+                                >
+                                    <div>תא {cell.number}</div>
+                                    <div>סטטוס: {cell.status}</div>
+                                    <div>שעת בדיקה: {cell.checkTime}</div>
+                                    <div>משך בדיקה: {cell.duration} שניות</div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    <button
+                        onClick={resetTest}
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-semibold"
+                    >
+                        התחל בדיקה חדשה
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="min-h-screen bg-gray-900 text-white p-6">
+            <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                    <NightKingdomLogo size="large" />
+                    <h1 className="text-2xl font-bold">בדיקת תאים</h1>
+                    <div className="bg-gray-800 px-4 py-2 rounded-lg flex items-center gap-2">
+                        <Timer className="h-5 w-5" />
+                        <span className="font-mono text-xl">{elapsedTime.toFixed(1)}s</span>
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-6">
+                    {cells.map((cell, index) => (
+                        <div key={index}
+                            className={`
+                relative p-6 rounded-lg
+                ${cell.active ? 'bg-green-700' :
+                                    cell.failed ? 'bg-red-700' :
+                                        index === currentCell ? 'bg-blue-700 animate-pulse' :
+                                            'bg-gray-700'}
+              `}
+                        >
+                            <Radio className={`h-12 w-12 ${cell.active ? 'text-green-300' :
+                                    cell.failed ? 'text-red-300' :
+                                        'text-gray-400'
+                                }`} />
+                            <div className="mt-2 text-center">
+                                <h3 className="text-xl font-bold">תא {index + 1}</h3>
+                                {cell.timestamp && (
+                                    <p className="text-sm opacity-80">
+                                        {new Date(cell.timestamp).toLocaleTimeString()}
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
         </div>
-      )}
-    </div>
-  );
+    );
 };
 
 export default InspectionSystem;

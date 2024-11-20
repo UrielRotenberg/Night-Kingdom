@@ -17,8 +17,14 @@ const io = new Server(server, {
 io.on('connection', (socket) => {
   console.log('Client connected');
 
-  socket.on('flashlightActivated', (data) => {
-    io.emit('cellActivated', data);
+  socket.on('activateCell', (data) => {
+    console.log('Activating cell:', data.cellNumber);
+    io.emit('activateCell', { cellNumber: data.cellNumber });
+  });
+
+  socket.on('cellUpdate', (cellNumber) => {
+    console.log('Cell updated:', cellNumber);
+    io.emit('cellUpdate', cellNumber);
   });
 
   socket.on('disconnect', () => {
@@ -26,7 +32,7 @@ io.on('connection', (socket) => {
   });
 });
 
-const PORT = process.env.PORT || 3001;
+const PORT = 3001;
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
