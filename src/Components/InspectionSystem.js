@@ -20,6 +20,45 @@ const InspectionSystem = ({ onBack }) => {
   const cellTimeout = useRef(null);
   const flashlightTimeout = useRef(null);
 
+  const activateFlashlight = async () => {
+    if (stage !== 'inspection' || !cells[currentCell]) return;
+    
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment' }
+      });
+      const track = stream.getVideoTracks()[0];
+      
+      await track.applyConstraints({
+        advanced: [{ torch: true }]
+      });
+      
+      setTimeout(async () => {
+        await track.applyConstraints({
+          advanced: [{ torch: false }]
+        });
+        stream.getTracks().forEach(track => track.stop());
+        
+        setCells(prev => {
+          const newCells = [...prev];
+          newCells[currentCell] = {
+            active: true,
+            timestamp: Date.now(),
+            duration: (Date.now() - startTime) / 1000,
+            skipped: false,
+            failed: false
+          };
+          return newCells;
+        });
+        setCurrentCell(prev => prev + 1);
+      }, 2000);
+      
+    } catch (err) {
+      console.error('Flashlight error:', err);
+      alert('שגיאה בהפעלת הפנס. נא לוודא שיש הרשאות מתאימות.');
+    }
+  };
+
   useEffect(() => {
     if (stage === 'initial' && !hasSpoken) {
       const announcement = new SpeechSynthesisUtterance(
@@ -40,6 +79,12 @@ const InspectionSystem = ({ onBack }) => {
           console.log('Heard:', transcript);
           if (transcript.includes('התחל בדיקה')) {
             startInspection();
+          }
+        };
+
+        recognition.current.onend = () => {
+          if (stage === 'listening') {
+            recognition.current.start();
           }
         };
 
@@ -80,13 +125,11 @@ const InspectionSystem = ({ onBack }) => {
 
       return () => clearTimeout(cellTimeout.current);
     }
-  }, [currentCell, cells, stage]);
 
-  useEffect(() => {
     if (stage === 'inspection' && currentCell >= cells.length) {
       completeInspection();
     }
-  }, [currentCell, cells.length, stage]);
+  }, [currentCell, cells, stage]);
 
   const startInspection = () => {
     setStage('inspection');
@@ -145,8 +188,9 @@ const InspectionSystem = ({ onBack }) => {
             {cells.map((cell, index) => (
               <div 
                 key={index}
+                onClick={() => index === currentCell && activateFlashlight()}
                 className={`
-                  relative p-6 rounded-lg
+                  relative p-6 rounded-lg cursor-pointer
                   ${cell.active ? 'bg-green-700' : 
                     cell.failed ? 'bg-red-700' :
                     cell.skipped ? 'bg-yellow-700' :
@@ -156,7 +200,6 @@ const InspectionSystem = ({ onBack }) => {
                 `}
               >
                 <div className="absolute inset-0 opacity-20">
-                  {/* תבנית התא */}
                   <div className="w-full h-1 bg-gray-800" />
                   <div className="absolute top-0 bottom-0 left-1/4 w-1 bg-gray-800" />
                   <div className="absolute top-0 bottom-0 left-1/2 w-1 bg-gray-800" />
