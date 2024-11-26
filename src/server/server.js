@@ -27,6 +27,11 @@ io.on('connection', (socket) => {
     io.emit('cellUpdate', cellNumber);
   });
 
+  socket.on('cellSkipped', (cellNumber) => {
+    console.log('Cell skipped:', cellNumber);
+    io.emit('cellSkipped', cellNumber);
+  });
+
   socket.on('disconnect', () => {
     console.log('Client disconnected');
   });

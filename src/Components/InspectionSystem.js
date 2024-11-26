@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Timer, Radio } from 'lucide-react';
 import io from 'socket.io-client';
-import NightKingdomLogo from './logo/NightKingdomLogo';
+import prisonBackground from '../Components/logo/prison-background.jpg';
 
 const InspectionSystem = () => {
     const [cells, setCells] = useState(Array(6).fill({
@@ -14,21 +14,24 @@ const InspectionSystem = () => {
     const [currentCell, setCurrentCell] = useState(0);
     const [elapsedTime, setElapsedTime] = useState(0);
     const [startTime, setStartTime] = useState(null);
-    const [isTestActive, setIsTestActive] = useState(true);
+    const [isTestActive, setIsTestActive] = useState(false);
     const [results, setResults] = useState(null);
+    const [socket, setSocket] = useState(null);
 
-    const socket = io('http://172.20.10.4:3001', {
-        transports: ['websocket', 'polling']
-    });
-
-    // Initialize start time
     useEffect(() => {
-        if (!startTime) {
-            setStartTime(Date.now());
-        }
+        const newSocket = io('http://172.20.10.4:3001', {
+            transports: ['websocket', 'polling']
+        });
+        setSocket(newSocket);
+        return () => newSocket.disconnect();
     }, []);
 
-    // Timer effect
+    useEffect(() => {
+        if (!startTime && isTestActive) {
+            setStartTime(Date.now());
+        }
+    }, [startTime, isTestActive]);
+
     useEffect(() => {
         let timer;
         if (isTestActive) {
@@ -39,12 +42,11 @@ const InspectionSystem = () => {
         return () => clearInterval(timer);
     }, [startTime, isTestActive]);
 
-    // Socket events handling
     useEffect(() => {
+        if (!socket) return;
+
         socket.on('activateCell', ({ cellNumber }) => {
-            console.log('Received activation for cell:', cellNumber);
             if (cellNumber === currentCell) {
-                // עדכון התא הנוכחי
                 setCells(prev => {
                     const newCells = [...prev];
                     newCells[currentCell] = {
@@ -57,22 +59,18 @@ const InspectionSystem = () => {
                     return newCells;
                 });
 
-                // מעבר לתא הבא
                 const nextCell = currentCell + 1;
                 setCurrentCell(nextCell);
-
-                // שליחת עדכון חזרה למובייל
                 socket.emit('cellUpdate', nextCell);
             }
         });
 
         return () => socket.off('activateCell');
-    }, [currentCell, startTime]);
+    }, [currentCell, startTime, socket]);
 
-    // Cell timeout effect
     useEffect(() => {
         let timeout;
-        if (isTestActive && currentCell < cells.length) {
+        if (isTestActive && currentCell < cells.length && socket) {
             timeout = setTimeout(() => {
                 if (!cells[currentCell].active) {
                     setCells(prev => {
@@ -88,9 +86,12 @@ const InspectionSystem = () => {
                     });
                     const nextCell = currentCell + 1;
                     setCurrentCell(nextCell);
+                    
+                    // שליחת אירוע הדילוג
+                    socket.emit('cellSkipped', currentCell);
                     socket.emit('cellUpdate', nextCell);
                 }
-            }, 7000);
+            }, 5000);
         }
 
         if (currentCell >= cells.length && isTestActive) {
@@ -98,7 +99,7 @@ const InspectionSystem = () => {
         }
 
         return () => clearTimeout(timeout);
-    }, [currentCell, cells, isTestActive]);
+    }, [currentCell, cells, isTestActive, socket]);
 
     const completeTest = () => {
         setIsTestActive(false);
@@ -124,17 +125,19 @@ const InspectionSystem = () => {
             })),
             grade: successRate === 100 ? 'מצוין' :
                 successRate >= 90 ? 'טוב מאוד' :
-                    successRate >= 80 ? 'טוב' : 'נכשל',
+                successRate >= 80 ? 'טוב' : 'נכשל',
             shiftInfo: {
-                prison: 'איילון',
-                wing: 'אגף ב׳',
-                officer: 'סוהר יוסי כהן',
-                shift: 'משמרת לילה'
+                prison: 'מגידו',
+                wing: '1 - פח"ע',
+                officer: 'ישראל כהן',
+                shift: 'לילה'
             }
         });
     };
 
     const resetTest = () => {
+        setIsTestActive(false);
+        setResults(null);
         setCells(Array(6).fill({
             active: false,
             timestamp: null,
@@ -144,18 +147,15 @@ const InspectionSystem = () => {
         }));
         setCurrentCell(0);
         setElapsedTime(0);
-        setStartTime(Date.now());
-        setIsTestActive(true);
-        setResults(null);
-        socket.emit('cellUpdate', 0); // Reset mobile client
+        setStartTime(null);
+        socket.emit('cellUpdate', 0);
     };
 
-    if (!isTestActive && results) {
+    if (results) {
         return (
-            <div className="min-h-screen bg-gray-900 text-white p-6">
+            <div className="min-h-screen bg-gray-900 text-white p-6" dir="rtl">
                 <div className="max-w-4xl mx-auto bg-gray-800 rounded-xl shadow-2xl p-8">
                     <h1 className="text-3xl font-bold text-center mb-8 text-blue-400">
-                        <NightKingdomLogo size="large" />
                         סיכום בדיקת תאים
                     </h1>
 
@@ -201,10 +201,11 @@ const InspectionSystem = () => {
                         <div className="grid gap-3">
                             {results.cellDetails.map(cell => (
                                 <div key={cell.number}
-                                    className={`p-3 rounded-lg grid grid-cols-4 gap-4 ${cell.status === 'תקין' ? 'bg-green-800/50' :
-                                            cell.status === 'נכשל' ? 'bg-red-800/50' :
-                                                'bg-gray-800/50'
-                                        }`}
+                                    className={`p-3 rounded-lg grid grid-cols-4 gap-4 ${
+                                        cell.status === 'תקין' ? 'bg-green-800/50' :
+                                        cell.status === 'נכשל' ? 'bg-red-800/50' :
+                                        'bg-gray-800/50'
+                                    }`}
                                 >
                                     <div>תא {cell.number}</div>
                                     <div>סטטוס: {cell.status}</div>
@@ -219,7 +220,30 @@ const InspectionSystem = () => {
                         onClick={resetTest}
                         className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg font-semibold"
                     >
-                        התחל בדיקה חדשה
+                        חזור לדף הבית
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    if (!isTestActive) {
+        return (
+            <div className="h-screen w-full" style={{
+                backgroundImage: `url(${prisonBackground})`,
+                backgroundSize: '100% 100%',
+                backgroundPosition: 'center',
+                backgroundRepeat: 'no-repeat'
+            }}>
+                <div className="relative h-full w-full">
+                    <button
+                        onClick={() => setIsTestActive(true)}
+                        className="absolute left-[7%] bottom-[8%] bg-[#8B5CF6] hover:bg-[#7C3AED] text-white px-20 py-7 rounded-[50px] text-2xl font-medium transition-colors shadow-lg shadow-[#8B5CF6]/50 flex flex-col items-center justify-center w-80"
+                        style={{
+                            textShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                        }}
+                    >
+                        <span>התחל בדיקה</span>
                     </button>
                 </div>
             </div>
@@ -227,10 +251,9 @@ const InspectionSystem = () => {
     }
 
     return (
-        <div className="min-h-screen bg-gray-900 text-white p-6">
+        <div className="min-h-screen bg-gray-900 text-white p-6" dir="rtl">
             <div className="space-y-6">
                 <div className="flex justify-between items-center">
-                    <NightKingdomLogo size="large" />
                     <h1 className="text-2xl font-bold">בדיקת תאים</h1>
                     <div className="bg-gray-800 px-4 py-2 rounded-lg flex items-center gap-2">
                         <Timer className="h-5 w-5" />
@@ -242,17 +265,18 @@ const InspectionSystem = () => {
                     {cells.map((cell, index) => (
                         <div key={index}
                             className={`
-                relative p-6 rounded-lg
-                ${cell.active ? 'bg-green-700' :
-                                    cell.failed ? 'bg-red-700' :
-                                        index === currentCell ? 'bg-blue-700 animate-pulse' :
-                                            'bg-gray-700'}
-              `}
+                                relative p-6 rounded-lg
+                                ${cell.active ? 'bg-green-700' :
+                                cell.failed ? 'bg-red-700' :
+                                index === currentCell ? 'bg-blue-700 animate-pulse' :
+                                'bg-gray-700'}
+                            `}
                         >
-                            <Radio className={`h-12 w-12 ${cell.active ? 'text-green-300' :
-                                    cell.failed ? 'text-red-300' :
-                                        'text-gray-400'
-                                }`} />
+                            <Radio className={`h-12 w-12 ${
+                                cell.active ? 'text-green-300' :
+                                cell.failed ? 'text-red-300' :
+                                'text-gray-400'
+                            }`} />
                             <div className="mt-2 text-center">
                                 <h3 className="text-xl font-bold">תא {index + 1}</h3>
                                 {cell.timestamp && (

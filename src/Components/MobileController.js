@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import io from 'socket.io-client';
-import NightKingdomLogo from './logo/NightKingdomLogo';
+import logo from './logo/NightKingdomLogo.png';
 
 const MobileController = () => {
     const [currentCell, setCurrentCell] = useState(0);
@@ -9,30 +9,29 @@ const MobileController = () => {
     const [totalCells] = useState(6);
     const [testCompleted, setTestCompleted] = useState(false);
     const [testStarted, setTestStarted] = useState(false);
+    const [socket, setSocket] = useState(null);
 
     useEffect(() => {
-        const socket = io('http://172.20.10.4:3001', {
+        const newSocket = io('http://172.20.10.4:3001', {
             transports: ['websocket', 'polling'],
             autoConnect: true,
             reconnection: true,
             reconnectionAttempts: 10,
             reconnectionDelay: 1000
         });
+        setSocket(newSocket);
 
-        socket.on('connect', () => {
-            console.log('Connected to server');
+        newSocket.on('connect', () => {
             setSocketConnected(true);
             setDebugMsg('מחובר!');
         });
 
-        socket.on('connect_error', (error) => {
-            console.error('Connection error:', error);
+        newSocket.on('connect_error', (error) => {
             setSocketConnected(false);
             setDebugMsg(`שגיאת חיבור: ${error.message}`);
         });
 
-        socket.on('cellUpdate', (cellNumber) => {
-            console.log('Received cell update:', cellNumber);
+        newSocket.on('cellUpdate', (cellNumber) => {
             setCurrentCell(cellNumber);
             if (cellNumber >= totalCells) {
                 setTestCompleted(true);
@@ -43,40 +42,91 @@ const MobileController = () => {
             }
         });
 
-        const handleCellActivation = () => {
-            if (!testStarted) {
-                setTestStarted(true);
-                setTestCompleted(false);
-                setCurrentCell(0);
-                setDebugMsg('הבדיקה החלה');
-                socket.emit('startTest');
-                return;
-            }
-
-            if (testCompleted) {
-                setTestStarted(true);
-                setCurrentCell(0);
-                setTestCompleted(false);
-                setDebugMsg('התחלת בדיקה חדשה');
-                socket.emit('resetTest');
-                return;
-            }
-
-            if (socket.connected && currentCell < totalCells) {
-                console.log('Activating cell:', currentCell);
-                socket.emit('activateCell', { cellNumber: currentCell });
-            }
-        };
-
-        window.activateCell = handleCellActivation;
+        newSocket.on('cellSkipped', (cellNumber) => {
+            setCurrentCell(cellNumber);
+            setDebugMsg(`דילוג על תא ${cellNumber}`);
+        });
 
         return () => {
-            socket.off('connect');
-            socket.off('connect_error');
-            socket.off('cellUpdate');
-            socket.disconnect();
+            newSocket.disconnect();
         };
-    }, [currentCell, totalCells, testCompleted, testStarted]);
+    }, [totalCells]);
+
+    const activateFlashlight = async () => {
+        if (!socketConnected || !testStarted || currentCell >= totalCells) return;
+        
+        try {
+            if (!navigator.mediaDevices) {
+                throw new Error('המכשיר לא תומך בגישה למצלמה');
+            }
+
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: 'environment',
+                    torch: true
+                }
+            });
+            
+            const track = stream.getVideoTracks()[0];
+            
+            const capabilities = track.getCapabilities();
+            const settings = await track.getSettings();
+            
+            if (!capabilities.torch && !settings.torch) {
+                throw new Error('הפנס לא נתמך במכשיר זה');
+            }
+            
+            await track.applyConstraints({
+                advanced: [{ torch: true }]
+            });
+            
+            setDebugMsg('הפנס דולק...');
+            socket.emit('activateCell', { cellNumber: currentCell });
+            
+            setTimeout(async () => {
+                await track.applyConstraints({
+                    advanced: [{ torch: false }]
+                });
+                stream.getTracks().forEach(track => track.stop());
+            }, 2000);
+            
+        } catch (err) {
+            console.error('Flashlight error:', err);
+            setDebugMsg(`שגיאה: ${err.message}`);
+            socket.emit('activateCell', { cellNumber: currentCell });
+        }
+    };
+
+    const handleCellActivation = () => {
+        if (!socket) return;
+
+        if (!testStarted) {
+            setTestStarted(true);
+            setTestCompleted(false);
+            setCurrentCell(0);
+            setDebugMsg('הבדיקה החלה');
+            socket.emit('startTest');
+            return;
+        }
+
+        if (testCompleted) {
+            setTestStarted(true);
+            setCurrentCell(0);
+            setTestCompleted(false);
+            setDebugMsg('התחלת בדיקה חדשה');
+            socket.emit('resetTest');
+            return;
+        }
+
+        activateFlashlight();
+    };
+
+    useEffect(() => {
+        window.activateCell = handleCellActivation;
+        return () => {
+            window.activateCell = undefined;
+        };
+    }, [handleCellActivation]);
 
     const getButtonText = () => {
         if (!testStarted) return 'התחל בדיקה';
@@ -85,8 +135,8 @@ const MobileController = () => {
     };
 
     return (
-        <div className="min-h-screen bg-gray-900 text-white p-6 flex flex-col items-center justify-center">
-            <NightKingdomLogo size="large" />
+        <div className="min-h-screen bg-[#111111] text-white p-6 flex flex-col items-center justify-center">
+            <img src={logo} alt="Night Kingdom Logo" className="mb-8 h-16 w-auto" />
             <h1 className="text-2xl font-bold mb-8">בקר בדיקת תאים</h1>
 
             {testStarted && (
@@ -100,14 +150,14 @@ const MobileController = () => {
             </div>
 
             <button
-                onClick={() => window.activateCell()}
+                onClick={handleCellActivation}
                 disabled={!socketConnected}
                 className={`
-          bg-blue-600 hover:bg-blue-700 text-white px-12 py-12 
-          rounded-full text-xl mb-4 transition-all
-          ${!socketConnected ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}
-          ${!testStarted ? 'bg-green-600 hover:bg-green-700' : ''}
-        `}
+                    bg-blue-600 hover:bg-blue-700 text-white px-12 py-12 
+                    rounded-full text-xl mb-4 transition-all
+                    ${!socketConnected ? 'opacity-50 cursor-not-allowed' : 'hover:scale-105'}
+                    ${!testStarted ? 'bg-green-600 hover:bg-green-700' : ''}
+                `}
             >
                 {getButtonText()}
             </button>
