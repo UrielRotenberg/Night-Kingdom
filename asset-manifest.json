@@ -1,20 +1,20 @@
 {
   "files": {
-    "main.css": "/UrielRotenberg/Night-Kingdom/static/css/main.624a6cf1.css",
-    "main.js": "/UrielRotenberg/Night-Kingdom/static/js/main.adb9cc02.js",
-    "static/js/213.1b2d6c66.chunk.js": "/UrielRotenberg/Night-Kingdom/static/js/213.1b2d6c66.chunk.js",
-    "static/js/732.1c0932ff.chunk.js": "/UrielRotenberg/Night-Kingdom/static/js/732.1c0932ff.chunk.js",
-    "static/media/PrisonBackground.png": "/UrielRotenberg/Night-Kingdom/static/media/PrisonBackground.1e69ef0f71f1b0ed420b.png",
-    "static/media/BackgroundCheck.png": "/UrielRotenberg/Night-Kingdom/static/media/BackgroundCheck.27f550a7a521495fd630.png",
-    "static/media/PdfBackground.png": "/UrielRotenberg/Night-Kingdom/static/media/PdfBackground.9d9f1154bd42f7b12bb1.png",
-    "index.html": "/UrielRotenberg/Night-Kingdom/index.html",
-    "main.624a6cf1.css.map": "/UrielRotenberg/Night-Kingdom/static/css/main.624a6cf1.css.map",
-    "main.adb9cc02.js.map": "/UrielRotenberg/Night-Kingdom/static/js/main.adb9cc02.js.map",
-    "213.1b2d6c66.chunk.js.map": "/UrielRotenberg/Night-Kingdom/static/js/213.1b2d6c66.chunk.js.map",
-    "732.1c0932ff.chunk.js.map": "/UrielRotenberg/Night-Kingdom/static/js/732.1c0932ff.chunk.js.map"
+    "main.css": "/Night-Kingdom/static/css/main.624a6cf1.css",
+    "main.js": "/Night-Kingdom/static/js/main.89540033.js",
+    "static/js/213.1b2d6c66.chunk.js": "/Night-Kingdom/static/js/213.1b2d6c66.chunk.js",
+    "static/js/732.1c0932ff.chunk.js": "/Night-Kingdom/static/js/732.1c0932ff.chunk.js",
+    "static/media/PrisonBackground.png": "/Night-Kingdom/static/media/PrisonBackground.1e69ef0f71f1b0ed420b.png",
+    "static/media/BackgroundCheck.png": "/Night-Kingdom/static/media/BackgroundCheck.27f550a7a521495fd630.png",
+    "static/media/PdfBackground.png": "/Night-Kingdom/static/media/PdfBackground.9d9f1154bd42f7b12bb1.png",
+    "index.html": "/Night-Kingdom/index.html",
+    "main.624a6cf1.css.map": "/Night-Kingdom/static/css/main.624a6cf1.css.map",
+    "main.89540033.js.map": "/Night-Kingdom/static/js/main.89540033.js.map",
+    "213.1b2d6c66.chunk.js.map": "/Night-Kingdom/static/js/213.1b2d6c66.chunk.js.map",
+    "732.1c0932ff.chunk.js.map": "/Night-Kingdom/static/js/732.1c0932ff.chunk.js.map"
   },
   "entrypoints": [
     "static/css/main.624a6cf1.css",
-    "static/js/main.adb9cc02.js"
+    "static/js/main.89540033.js"
   ]
 }
